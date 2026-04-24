@@ -17,6 +17,9 @@ from app.db.database import DatabaseManager
 from app.queue.job_queue import JobQueue
 from app.queue.redis_client import RedisClient
 from app.services.task_processor import TaskProcessor
+from app.services.inference_engine import InferenceEngine
+from app.queue.queue_consumer import QueueConsumer
+from app.db.db_logger import DBLogger
 
 # ── Logging ──────────────────────────────────────────────────────────────────
 
@@ -36,7 +39,6 @@ def _configure_logging() -> None:
     # Quieten noisy libraries
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("httpcore").setLevel(logging.WARNING)
-    logging.getLogger("ray").setLevel(logging.WARNING)
 
 
 logger = logging.getLogger(__name__)
@@ -64,17 +66,33 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     job_queue = JobQueue(redis_client.get_client())
     task_processor = TaskProcessor(job_queue)
 
+    # Initialize Inference Engine
+    inference_engine = InferenceEngine()
+
+    # Queue consumer for background processing
+    db_logger = DBLogger(db)
+    queue_consumer = QueueConsumer(
+        job_queue=job_queue,
+        processor=inference_engine,
+        db_logger=db_logger,
+    )
+    await queue_consumer.start()
+
     # Attach to app state for dependency injection
     app.state.redis_client = redis_client
     app.state.db = db
     app.state.job_queue = job_queue
     app.state.task_processor = task_processor
+    app.state.queue_consumer = queue_consumer
+    app.state.inference_engine = inference_engine
 
     logger.info("Application startup complete")
     yield
 
     # Shutdown
     logger.info("Shutting down…")
+    await queue_consumer.stop()
+    await inference_engine.close()
     await redis_client.disconnect()
     await db.dispose()
     logger.info("Shutdown complete")
@@ -89,7 +107,7 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title=settings.APP_NAME,
         version=settings.APP_VERSION,
-        description="Production-ready LLM inference gateway powered by vLLM, Ray Serve, and Redis.",
+        description="Production-ready LLM inference gateway powered by vLLM and Redis.",
         lifespan=lifespan,
     )
     app.include_router(router)

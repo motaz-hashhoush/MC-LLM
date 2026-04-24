@@ -15,13 +15,14 @@ import os
 DB_HOST = os.getenv("DB_HOST", "127.0.0.1")
 DB_PORT = os.getenv("DB_PORT", "5432")
 DB_USER = os.getenv("DB_USER", "postgres")
-DB_PASSWORD = os.getenv("DB_PASSWORD", "postgres")
+DB_PASSWORD = os.getenv("DB_PASSWORD", "1234")
 DB_NAME = os.getenv("DB_NAME", "llm_logs")
 
 
 def find_psql():
     """Find psql executable on Windows or Linux."""
     common_paths = [
+        r"C:\Program Files\PostgreSQL\18\bin\psql.exe",
         r"C:\Program Files\PostgreSQL\17\bin\psql.exe",
         r"C:\Program Files\PostgreSQL\16\bin\psql.exe",
         r"C:\Program Files\PostgreSQL\15\bin\psql.exe",

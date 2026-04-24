@@ -38,11 +38,15 @@ class JobStatus(str, Enum):
 class TaskRequest(BaseModel):
     """Incoming request body shared by all task endpoints."""
 
-    text: str = Field(
+    prompt: str = Field(
         ...,
         min_length=1,
         max_length=50_000,
         description="The input text to process.",
+    )
+    think: bool | None = Field(
+        default=None,
+        description="Whether to include thinking tags in the generation process. Only applies to /generate.",
     )
     max_tokens: int = Field(
         default=_settings.MAX_TOKENS,

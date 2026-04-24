@@ -41,11 +41,6 @@ class Settings(BaseSettings):
     RESULT_TTL: int = 3600  # seconds
     JOB_TIMEOUT: int = 120  # seconds
 
-    # --- Ray Serve ---
-    RAY_HEAD_ADDRESS: str = "ray://ray-head:10001"
-    RAY_MIN_REPLICAS: int = 1
-    RAY_MAX_REPLICAS: int = 4
-
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
 
