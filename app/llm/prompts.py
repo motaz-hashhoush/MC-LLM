@@ -38,13 +38,6 @@ TEMPLATES: dict[str, _Template] = {
             "its meaning:\n\n{text}"
         ),
     ),
-    "generate": _Template(
-        system=(
-            "You are a skilled content writer. Produce high-quality, detailed "
-            "content based on the given topic or outline."
-        ),
-        user="Write a detailed article about:\n\n{text}",
-    ),
 }
 
 

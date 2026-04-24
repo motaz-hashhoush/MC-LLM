@@ -1,6 +1,6 @@
 # 🔮 MC-LLM — Production LLM Inference Infrastructure
 
-A modular, production-ready system for serving LLM inference over REST. Built with **FastAPI**, **Ray Serve**, **vLLM**, **Redis**, and **PostgreSQL**.
+A modular, production-ready system for serving LLM inference over REST. Built with **FastAPI**, **vLLM**, **Redis**, and **PostgreSQL**.
 
 ---
 
@@ -15,10 +15,10 @@ Client Applications
         ├──▶  Redis Queue
         │         │
         │         ▼
-        │    Ray Serve Router
+        │    Queue Consumer
         │         │
         │         ▼
-        │    LLMWorker (autoscaling)
+        │    Inference Engine
         │         │
         │         ▼
         │    vLLM Server (:8000)  ──▶  GPU
@@ -104,9 +104,6 @@ All settings are controlled via environment variables:
 | `DATABASE_URL` | `postgresql+asyncpg://llm_user:llm_pass@postgres:5432/llm_logs` | PostgreSQL connection string |
 | `MAX_TOKENS` | `512` | Default max generation tokens |
 | `TEMPERATURE` | `0.7` | Default sampling temperature |
-| `RAY_HEAD_ADDRESS` | `ray://ray-head:10001` | Ray cluster address |
-| `RAY_MIN_REPLICAS` | `1` | Min Ray Serve worker replicas |
-| `RAY_MAX_REPLICAS` | `4` | Max Ray Serve worker replicas |
 
 ---
 
@@ -122,7 +119,8 @@ MC_LLM/
 │   │   └── schemas.py       # Pydantic models
 │   ├── queue/
 │   │   ├── redis_client.py  # Async Redis connection
-│   │   └── job_queue.py     # Job queue operations
+│   │   ├── job_queue.py     # Job queue operations
+│   │   └── queue_consumer.py # Background worker
 │   ├── llm/
 │   │   ├── vllm_client.py   # vLLM API wrapper
 │   │   └── prompts.py       # Task prompt templates
@@ -130,11 +128,9 @@ MC_LLM/
 │   │   ├── models.py        # SQLAlchemy ORM models
 │   │   ├── database.py      # Async engine management
 │   │   └── db_logger.py     # Structured DB logging
-│   ├── serve/
-│   │   ├── ray_worker.py    # Ray Serve LLM deployment
-│   │   └── ray_router.py    # Router + queue consumer
 │   └── services/
-│       └── task_processor.py # Request orchestrator
+│       ├── task_processor.py # Request orchestrator
+│       └── inference_engine.py # Direct inference logic
 ├── docker/
 │   ├── Dockerfile
 │   └── docker-compose.yml

@@ -32,6 +32,7 @@ class TaskProcessor:
         self,
         task_type: TaskType,
         text: str,
+        think: bool,
         max_tokens: int,
         temperature: float,
     ) -> TaskResponse:
@@ -44,6 +45,7 @@ class TaskProcessor:
             parameters={
                 "max_tokens": max_tokens,
                 "temperature": temperature,
+                "think": think,
             },
         )
 

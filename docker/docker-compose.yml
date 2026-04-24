@@ -3,8 +3,7 @@
 # Usage:
 #   docker compose -f docker/docker-compose.yml up -d
 #
-# Override model via .env or CLI:
-#   MODEL_NAME=meta-llama/Llama-3-8B docker compose -f docker/docker-compose.yml up -d
+# Override settings via .env file.
 # ─────────────────────────────────────────────────────────────────────────────
 
 services:
@@ -16,7 +15,7 @@ services:
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: [ "CMD", "redis-cli", "ping" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -27,50 +26,18 @@ services:
   vllm:
     image: vllm/vllm-openai:latest
     command: >
-      --model ${MODEL_NAME:-Qwen/Qwen3-0.6B}
-      --port 8000
-      --max-model-len ${MAX_MODEL_LEN:-2048}
-      --gpu-memory-utilization ${GPU_MEM_UTIL:-0.80}
-      --dtype float16
-    ports:
-      - "8000:8000"
+      --model /models/${MODEL_NAME} --served-model-name ${MODEL_NAME} --port 8000 --max-model-len ${MAX_MODEL_LEN} --gpu-memory-utilization ${GPU_MEM_UTIL} --dtype ${DTYPE}
+    volumes:
+      - vllm_models:/models
+    expose:
+      - "8000"
     deploy:
       resources:
         reservations:
           devices:
             - driver: nvidia
               count: all
-              capabilities: [gpu]
-    networks:
-      - llm-net
-
-  # ── Ray Head ─────────────────────────────────────────────────────────────
-  ray-head:
-    image: rayproject/ray:2.40.0-py312
-    command: >
-      ray start --head
-      --port=6380
-      --dashboard-host=0.0.0.0
-      --dashboard-port=8265
-      --block
-    ports:
-      - "6380:6380"
-      - "8265:8265"
-      - "10001:10001"
-    networks:
-      - llm-net
-
-  # ── Ray Worker ───────────────────────────────────────────────────────────
-  ray-worker:
-    image: rayproject/ray:2.40.0-py312
-    command: >
-      ray start
-      --address=ray-head:6380
-      --block
-    depends_on:
-      - ray-head
-    deploy:
-      replicas: 1
+              capabilities: [ gpu ]
     networks:
       - llm-net
 
@@ -82,14 +49,13 @@ services:
     ports:
       - "8080:8080"
     environment:
-      MODEL_NAME: "${MODEL_NAME:-Qwen/Qwen3-0.6B}"
-      REDIS_HOST: redis
-      REDIS_PORT: "6379"
-      VLLM_ENDPOINT: "http://vllm:8000"
-      DATABASE_URL: "${DATABASE_URL:-postgresql+asyncpg://llm_user:llm_pass@host.docker.internal:5432/llm_logs}"
-      RAY_HEAD_ADDRESS: "ray://ray-head:10001"
-      MAX_TOKENS: "512"
-      TEMPERATURE: "0.7"
+      MODEL_NAME: "${MODEL_NAME}"
+      REDIS_HOST: "${REDIS_HOST}"
+      REDIS_PORT: "${REDIS_PORT}"
+      VLLM_ENDPOINT: "${VLLM_ENDPOINT}"
+      DATABASE_URL: "${DATABASE_URL}"
+      MAX_TOKENS: "${MAX_TOKENS}"
+      TEMPERATURE: "${TEMPERATURE}"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
@@ -97,13 +63,13 @@ services:
         condition: service_healthy
       vllm:
         condition: service_started
-      ray-head:
-        condition: service_started
     networks:
       - llm-net
 
 volumes:
   redis_data:
+  vllm_models:
+
 
 networks:
   llm-net:

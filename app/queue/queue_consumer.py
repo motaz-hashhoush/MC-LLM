@@ -1,54 +1,39 @@
 """
-Ray Serve router and background queue consumer.
+Background queue consumer — dequeues jobs and processes them via the inference engine.
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any
+from typing import Any, Protocol
 
-import ray
-from ray import serve
-
-from app.config import get_settings
 from app.db.db_logger import DBLogger
 from app.queue.job_queue import JobQueue
-from app.serve.ray_worker import LLMWorker
 
 logger = logging.getLogger(__name__)
 
 
-class RayRouter:
-    """
-    Sends individual tasks to the :class:`LLMWorker` deployment.
-    """
-
-    def __init__(self) -> None:
-        self._handle: serve.DeploymentHandle = LLMWorker.get_handle()
-
+class Processor(Protocol):
+    """Protocol for the inference processor."""
     async def process_task(self, task: dict[str, Any]) -> dict[str, Any]:
-        """
-        Submit *task* to the LLMWorker and return the result dict.
-        """
-        result: dict[str, Any] = await self._handle.remote(task)
-        return result
+        ...
 
 
 class QueueConsumer:
     """
     Background loop that continuously dequeues jobs from Redis,
-    dispatches them to :class:`RayRouter`, and stores results back.
+    dispatched them to a processor, and stores results back.
     """
 
     def __init__(
         self,
         job_queue: JobQueue,
-        router: RayRouter,
+        processor: Processor,
         db_logger: DBLogger | None = None,
     ) -> None:
         self._queue = job_queue
-        self._router = router
+        self._processor = processor
         self._db_logger = db_logger
         self._running = False
         self._task: asyncio.Task[None] | None = None
@@ -89,7 +74,7 @@ class QueueConsumer:
                     )
 
                 # Process
-                result = await self._router.process_task(job)
+                result = await self._processor.process_task(job)
 
                 # Store result
                 if "error" in result:

@@ -86,7 +86,17 @@ class VLLMClient:
         logger.debug("vLLM request → %s/v1/chat/completions", self._endpoint)
 
         response = await self._http.post("/v1/chat/completions", json=payload)
-        response.raise_for_status()
+        
+        if response.status_code != 200:
+            try:
+                error_data = response.json()
+                # vLLM returns error in {"error": {"message": "...", "type": "...", ...}}
+                if isinstance(error_data, dict) and "error" in error_data:
+                    error_msg = error_data["error"].get("message", response.text)
+                    raise Exception(f"vLLM Error: {error_msg}")
+            except (ValueError, KeyError, AttributeError):
+                pass
+            response.raise_for_status()
 
         data = response.json()
         content: str = data["choices"][0]["message"]["content"]

@@ -37,17 +37,26 @@ async def _handle_task(
 ) -> TaskResponse:
     """Common handler shared by all task endpoints."""
     start = time.perf_counter()
+    # Decide think flag based on task type and user input
+    if task_type == TaskType.GENERATE:
+        think_val = body.think if body.think is not None else False
+    else:
+        # Defaults to False for summarize/rewrite, even if user sends True
+        think_val = False
+
     logger.info(
-        "Received %s request (text_len=%d, max_tokens=%d, temp=%.2f)",
+        "Received %s request (prompt_len=%d, max_tokens=%d, temp=%.2f, think=%s)",
         task_type.value,
-        len(body.text),
+        len(body.prompt),
         body.max_tokens,
         body.temperature,
+        think_val,
     )
 
     response = await processor.process(
         task_type=task_type,
-        text=body.text,
+        text=body.prompt,
+        think=think_val,
         max_tokens=body.max_tokens,
         temperature=body.temperature,
     )
