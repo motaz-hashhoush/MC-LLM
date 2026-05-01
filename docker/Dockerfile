@@ -3,13 +3,14 @@
 FROM python:3.12-slim AS base
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    LD_LIBRARY_PATH="/usr/local/lib/python3.12/site-packages/nvidia/cublas/lib:/usr/local/lib/python3.12/site-packages/nvidia/cudnn/lib"
 
 WORKDIR /opt/mc-llm
 
-# Install OS-level deps (for asyncpg / hiredis build)
+# Install OS-level deps (for asyncpg / hiredis build + audio processing)
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends gcc libpq-dev && \
+    apt-get install -y --no-install-recommends gcc libpq-dev libsndfile1 ffmpeg && \
     rm -rf /var/lib/apt/lists/*
 
 # ── Dependencies ─────────────────────────────────────────────────────────────

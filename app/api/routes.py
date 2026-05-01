@@ -8,14 +8,28 @@ import logging
 import time
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
 
-from app.api.schemas import HealthResponse, TaskRequest, TaskResponse, TaskType
+from app.api.schemas import HealthResponse, TaskRequest, TaskResponse, TaskType, TranscribeResponse
 from app.services.task_processor import TaskProcessor
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+# Accepted MIME types for audio uploads
+_ALLOWED_CONTENT_TYPES = {
+    "audio/wav",
+    "audio/x-wav",
+    "audio/mpeg",
+    "audio/mp3",
+    "audio/mp4",
+    "audio/x-m4a",
+    "audio/ogg",
+    "audio/flac",
+    "audio/webm",
+    "application/octet-stream",  # some clients send this for any binary
+}
 
 
 # ── Dependency ───────────────────────────────────────────────────────────────
@@ -105,3 +119,76 @@ async def generate(
 async def health(request: Request) -> HealthResponse:
     """Return service health status."""
     return HealthResponse()
+
+
+# ── Speech-to-Text ────────────────────────────────────────────────────────────
+
+@router.post("/stt", response_model=TranscribeResponse)
+async def transcribe_audio(
+    request: Request,
+    file: UploadFile = File(..., description="Audio file to transcribe (WAV, MP3, M4A, OGG, FLAC, WEBM)."),
+    language: str = Query(
+        default=None,
+        description="Language hint for Whisper (e.g. 'ar', 'en'). Defaults to the server's 'ar'.",
+    ),
+) -> TranscribeResponse:
+    """Transcribe an uploaded audio file and return the Arabic (or specified language) text."""
+    import uuid
+    from app.api.schemas import JobStatus
+    from app.config import get_settings
+
+    settings = get_settings()
+    effective_language = language or settings.STT_LANGUAGE
+
+    whisper_client = getattr(request.app.state, "whisper_client", None)
+    if whisper_client is None:
+        raise HTTPException(status_code=503, detail="STT service not ready")
+
+    # ── Validate content type ────────────────────────────────────────────────
+    content_type = (file.content_type or "").split(";")[0].strip().lower()
+    if content_type and content_type not in _ALLOWED_CONTENT_TYPES:
+        raise HTTPException(
+            status_code=415,
+            detail=f"Unsupported media type '{content_type}'. Accepted: WAV, MP3, M4A, OGG, FLAC, WEBM.",
+        )
+
+    # ── Read & size-check ────────────────────────────────────────────────────
+    audio_bytes = await file.read()
+    max_bytes = settings.STT_MAX_AUDIO_MB * 1024 * 1024
+    if len(audio_bytes) > max_bytes:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Audio file exceeds the {settings.STT_MAX_AUDIO_MB} MB limit.",
+        )
+
+    job_id = uuid.uuid4()
+    logger.info(
+        "Received /stt request (file=%s, size=%d bytes, lang=%s)",
+        file.filename,
+        len(audio_bytes),
+        effective_language,
+    )
+
+    try:
+        transcript = await whisper_client.transcribe(
+            audio_bytes=audio_bytes,
+            filename=file.filename or "audio.wav",
+            language=effective_language,
+        )
+        logger.info("Transcription job %s completed (%d chars)", job_id, len(transcript))
+        return TranscribeResponse(
+            id=job_id,
+            status=JobStatus.COMPLETED,
+            transcript=transcript,
+            language=effective_language,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("Transcription job %s failed", job_id)
+        return TranscribeResponse(
+            id=job_id,
+            status=JobStatus.FAILED,
+            language=effective_language,
+            error=str(exc),
+        )

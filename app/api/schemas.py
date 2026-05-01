@@ -22,6 +22,7 @@ class TaskType(str, Enum):
     SUMMARIZE = "summarize"
     REWRITE = "rewrite"
     GENERATE = "generate"
+    TRANSCRIBE = "transcribe"
 
 
 class JobStatus(str, Enum):
@@ -74,9 +75,20 @@ class TaskResponse(BaseModel):
     error: str | None = None
 
 
+class TranscribeResponse(BaseModel):
+    """Response returned by the /transcribe endpoint."""
+
+    id: UUID
+    status: JobStatus
+    transcript: str | None = None
+    language: str = "ar"
+    error: str | None = None
+
+
 class HealthResponse(BaseModel):
     """Health-check response."""
 
     status: str = "ok"
     version: str = _settings.APP_VERSION
     model: str = _settings.MODEL_NAME
+    stt_model: str = _settings.STT_MODEL_NAME

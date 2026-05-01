@@ -48,6 +48,8 @@ services:
       dockerfile: docker/Dockerfile
     ports:
       - "8080:8080"
+    volumes:
+      - ../models:/models:ro        # host models/ dir mounted read-only inside the container
     environment:
       MODEL_NAME: "${MODEL_NAME}"
       REDIS_HOST: "${REDIS_HOST}"
@@ -56,6 +58,19 @@ services:
       DATABASE_URL: "${DATABASE_URL}"
       MAX_TOKENS: "${MAX_TOKENS}"
       TEMPERATURE: "${TEMPERATURE}"
+      STT_DEVICE: "${STT_DEVICE:-cuda}"
+      STT_COMPUTE_TYPE: "${STT_COMPUTE_TYPE:-float16}"
+      STT_MAX_AUDIO_MB: "${STT_MAX_AUDIO_MB:-25}"
+      STT_LANGUAGE: "${STT_LANGUAGE:-ar}"
+      STT_MODEL_NAME: "${STT_MODEL_NAME:-deepdml/faster-whisper-large-v3-turbo-ct2}"
+      STT_MODEL_PATH: "${STT_MODEL_PATH:-/models/deepdml/faster-whisper-large-v3-turbo-ct2}"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [ gpu ]
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:

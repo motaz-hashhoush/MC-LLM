@@ -20,6 +20,7 @@ from app.services.task_processor import TaskProcessor
 from app.services.inference_engine import InferenceEngine
 from app.queue.queue_consumer import QueueConsumer
 from app.db.db_logger import DBLogger
+from app.stt.whisper_client import WhisperClient
 
 # ── Logging ──────────────────────────────────────────────────────────────────
 
@@ -86,6 +87,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     app.state.queue_consumer = queue_consumer
     app.state.inference_engine = inference_engine
 
+    # Whisper STT (loads model weights; runs after other services are ready)
+    whisper_client = WhisperClient()
+    app.state.whisper_client = whisper_client
+
     logger.info("Application startup complete")
     yield
 
@@ -93,6 +98,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     logger.info("Shutting down…")
     await queue_consumer.stop()
     await inference_engine.close()
+    await whisper_client.close()
     await redis_client.disconnect()
     await db.dispose()
     logger.info("Shutdown complete")

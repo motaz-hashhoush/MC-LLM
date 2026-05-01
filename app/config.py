@@ -17,8 +17,16 @@ class Settings(BaseSettings):
     APP_VERSION: str = "1.0.0"
     DEBUG: bool = False
 
-    # --- Model ---
+    # --- LLM Model ---
     MODEL_NAME: str = "Qwen/Qwen3-14B"
+
+    # --- STT Model (faster-whisper / CTranslate2) ---
+    STT_MODEL_NAME: str = "deepdml/faster-whisper-large-v3-turbo-ct2"
+    STT_MODEL_PATH: str = ""  # If set, load from this local path instead of HuggingFace hub
+    STT_DEVICE: str = "cuda"          # "cuda" | "cpu"
+    STT_COMPUTE_TYPE: str = "float16" # "float16" (GPU) | "int8" (CPU) | "float32"
+    STT_MAX_AUDIO_MB: int = 25
+    STT_LANGUAGE: str = "ar"          # ISO 639-1 code: "ar"=Arabic, "en"=English, etc.
 
     # --- vLLM ---
     VLLM_ENDPOINT: str = "http://vllm:8000"
