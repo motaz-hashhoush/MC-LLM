@@ -128,15 +128,27 @@ MC_LLM/
 │   │   ├── models.py        # SQLAlchemy ORM models
 │   │   ├── database.py      # Async engine management
 │   │   └── db_logger.py     # Structured DB logging
-│   └── services/
-│       ├── task_processor.py # Request orchestrator
-│       └── inference_engine.py # Direct inference logic
+│   ├── services/
+│   │   ├── task_processor.py # Request orchestrator
+│   │   └── inference_engine.py # Direct inference logic
+│   └── stt/
+│       └── whisper_client.py # Faster-Whisper STT client
 ├── docker/
-│   ├── Dockerfile
-│   └── docker-compose.yml
-├── requirements.txt
+│   ├── Dockerfile           # App container definition
+│   ├── docker-compose.yml   # Multi-service orchestration
+│   └── init_db.sql          # DB initialization script
+├── scripts/
+│   ├── download_model.py    # Model pre-fetching script
+│   ├── export_db.py         # Database backup utility
+│   ├── import_db.py         # Database restoration utility
+│   └── test_db.py           # DB connection tester
+├── implementation_plan/
+│   └── stt_implementation_plan.md # STT roadmap
+├── .env                     # Local environment secrets
+├── requirements.txt         # Python dependencies
 └── README.md
 ```
+
 
 ---
 
