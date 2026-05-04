@@ -27,3 +27,7 @@ nvidia-cudnn-cu12>=8.9.2.26    # Required by CTranslate2 on GPU
 
 # ── vLLM (install separately on GPU nodes) ──────────────────────────────────
 # vllm>=0.6.0
+
+# ── TTS (SILMA) ──────────────────────────────────────────────────────────────
+silma-tts>=1.0.0
+pydub>=0.25.1

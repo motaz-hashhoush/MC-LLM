@@ -4,6 +4,7 @@ MC-LLM Inference Gateway — FastAPI application entry point.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import sys
 from contextlib import asynccontextmanager
@@ -11,7 +12,7 @@ from collections.abc import AsyncGenerator
 
 from fastapi import FastAPI
 
-from app.api.routes import router
+from app.api.routes import router, tts_router
 from app.config import get_settings
 from app.db.database import DatabaseManager
 from app.queue.job_queue import JobQueue
@@ -21,6 +22,8 @@ from app.services.inference_engine import InferenceEngine
 from app.queue.queue_consumer import QueueConsumer
 from app.db.db_logger import DBLogger
 from app.stt.whisper_client import WhisperClient
+from app.tts.silma_client import SilmaTTSClient
+from app.tts.tts_processor import TTSProcessor
 
 # ── Logging ──────────────────────────────────────────────────────────────────
 
@@ -87,9 +90,23 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     app.state.queue_consumer = queue_consumer
     app.state.inference_engine = inference_engine
 
-    # Whisper STT (loads model weights; runs after other services are ready)
-    whisper_client = WhisperClient()
+    # Whisper STT + SILMA TTS — construct/load both concurrently to cut startup time.
+    # WhisperClient loads the model in __init__, so we wrap it in a thread as well.
+    silma_client = SilmaTTSClient(
+        model_path=settings.TTS_MODEL_PATH,
+        device=settings.TTS_DEVICE,
+    )
+
+    logger.info("Loading Whisper STT and SILMA TTS models in parallel…")
+    whisper_client, _ = await asyncio.gather(
+        asyncio.to_thread(WhisperClient),
+        asyncio.to_thread(silma_client.load),
+    )
+    logger.info("Whisper STT and SILMA TTS models ready")
+
     app.state.whisper_client = whisper_client
+    app.state.silma_client = silma_client
+    app.state.tts_processor = TTSProcessor(silma_client, db_logger)
 
     logger.info("Application startup complete")
     yield
@@ -99,6 +116,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     await queue_consumer.stop()
     await inference_engine.close()
     await whisper_client.close()
+    silma_client.unload()
+    logger.info("SILMA TTS model unloaded on shutdown")
     await redis_client.disconnect()
     await db.dispose()
     logger.info("Shutdown complete")
@@ -117,6 +136,7 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
     app.include_router(router)
+    app.include_router(tts_router)
     return app
 
 

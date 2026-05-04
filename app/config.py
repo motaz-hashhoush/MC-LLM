@@ -23,8 +23,8 @@ class Settings(BaseSettings):
     # --- STT Model (faster-whisper / CTranslate2) ---
     STT_MODEL_NAME: str = "deepdml/faster-whisper-large-v3-turbo-ct2"
     STT_MODEL_PATH: str = ""  # If set, load from this local path instead of HuggingFace hub
-    STT_DEVICE: str = "cuda"          # "cuda" | "cpu"
-    STT_COMPUTE_TYPE: str = "float16" # "float16" (GPU) | "int8" (CPU) | "float32"
+    STT_DEVICE: str = "cpu"          # "cuda" | "cpu"
+    STT_COMPUTE_TYPE: str = "int8"   # "float16" (GPU) | "int8" (CPU)
     STT_MAX_AUDIO_MB: int = 25
     STT_LANGUAGE: str = "ar"          # ISO 639-1 code: "ar"=Arabic, "en"=English, etc.
 
@@ -48,6 +48,15 @@ class Settings(BaseSettings):
     QUEUE_NAME: str = "llm:tasks"
     RESULT_TTL: int = 3600  # seconds
     JOB_TIMEOUT: int = 120  # seconds
+
+    # --- TTS (SILMA) ---
+    TTS_MODEL_NAME: str = "silma-ai/silma-tts"
+    TTS_MODEL_PATH: str = "/models/silma-ai/silma-tts"
+    TTS_DEVICE: str = "cuda"
+    TTS_MAX_CHARS: int = 2000
+    TTS_DEFAULT_LANGUAGE: str = "ar"
+    TTS_DEFAULT_SPEED: float = 1.0
+    TTS_DEFAULT_FORMAT: str = "wav"
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 

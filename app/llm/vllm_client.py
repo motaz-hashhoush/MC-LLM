@@ -93,7 +93,7 @@ class VLLMClient:
                 # vLLM returns error in {"error": {"message": "...", "type": "...", ...}}
                 if isinstance(error_data, dict) and "error" in error_data:
                     error_msg = error_data["error"].get("message", response.text)
-                    raise Exception(f"vLLM Error: {error_msg}")
+                    raise Exception(f"{error_msg}")
             except (ValueError, KeyError, AttributeError):
                 pass
             response.raise_for_status()

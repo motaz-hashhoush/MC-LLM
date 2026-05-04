@@ -87,3 +87,29 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public
 -- ============================================================================
 -- Done! Your database is ready for MC-LLM.
 -- ============================================================================
+
+-- ── TTS Logging ─────────────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS tts_requests (
+    id             SERIAL PRIMARY KEY,
+    text           TEXT NOT NULL,
+    language       VARCHAR(10) NOT NULL DEFAULT 'ar',
+    speed          FLOAT NOT NULL DEFAULT 1.0,
+    format         VARCHAR(10) NOT NULL DEFAULT 'wav',
+    has_ref_audio  BOOLEAN NOT NULL DEFAULT FALSE,
+    duration_ms    FLOAT,
+    audio_size_b   INTEGER,
+    status         VARCHAR(20) NOT NULL DEFAULT 'success',
+    error_message  TEXT,
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_tts_requests_created_at
+    ON tts_requests (created_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_tts_requests_status
+    ON tts_requests (status);
+
+-- Grant access to the app user
+GRANT ALL PRIVILEGES ON TABLE tts_requests TO llm_user;
+GRANT USAGE, SELECT ON SEQUENCE tts_requests_id_seq TO llm_user;

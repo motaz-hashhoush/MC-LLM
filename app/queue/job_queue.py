@@ -30,10 +30,10 @@ class JobQueue:
     """
 
     def __init__(self, client: aioredis.Redis) -> None:
-        self._client = client
+        self._client: aioredis.Redis = client
         self._settings = get_settings()
-        self._queue_name = self._settings.QUEUE_NAME
-        self._result_ttl = self._settings.RESULT_TTL
+        self._queue_name: str = self._settings.QUEUE_NAME
+        self._result_ttl: int = self._settings.RESULT_TTL
 
     # ── Enqueue ──────────────────────────────────────────────────────────
 

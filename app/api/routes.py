@@ -192,3 +192,104 @@ async def transcribe_audio(
             language=effective_language,
             error=str(exc),
         )
+
+
+# ── Text-to-Speech ────────────────────────────────────────────────────────────
+
+import asyncio
+import io
+
+from fastapi.responses import StreamingResponse
+
+from app.api.schemas import TTSRequest
+from app.tts.silma_client import SilmaTTSClient, TTSError
+from app.tts.tts_processor import TTSProcessor, TTSJobSchema
+
+tts_router = APIRouter(prefix="/v1", tags=["Text-to-Speech"])
+
+
+def _get_silma_client(request: Request) -> SilmaTTSClient:
+    """Retrieve SilmaTTSClient from application state."""
+    client: SilmaTTSClient | None = getattr(request.app.state, "silma_client", None)
+    if client is None:
+        raise HTTPException(status_code=503, detail="TTS service not ready")
+    return client
+
+
+def _get_tts_processor(request: Request) -> TTSProcessor:
+    """Retrieve TTSProcessor from application state."""
+    processor: TTSProcessor | None = getattr(request.app.state, "tts_processor", None)
+    if processor is None:
+        raise HTTPException(status_code=503, detail="TTS service not ready")
+    return processor
+
+
+@tts_router.post("/tts")
+async def tts_speech(
+    body: TTSRequest,
+    request: Request,
+) -> StreamingResponse:
+    """
+    Synthesise text to speech and return an audio stream.
+
+    Supports Arabic (MSA) and English. Optionally accepts a base64-encoded
+    WAV reference audio clip for zero-shot voice cloning.
+
+    Returns
+    -------
+    StreamingResponse
+        ``audio/wav`` (default) or ``audio/mpeg`` if ``format="mp3"``.
+
+    Errors
+    ------
+    - **400** — Pydantic validation errors (text too long, invalid language/format)
+    - **503** — TTS model not loaded
+    - **500** — Internal synthesis failure
+    """
+    client = _get_silma_client(request)
+    processor = _get_tts_processor(request)
+
+    # Guard: model must be loaded
+    if not client.is_loaded():
+        raise HTTPException(
+            status_code=503,
+            detail="TTS model not loaded.",
+        )
+
+    logger.info(
+        "Received /v1/tts request (lang=%s, speed=%.2f, fmt=%s, chars=%d)",
+        body.language,
+        body.speed,
+        body.format,
+        len(body.text),
+    )
+
+    job = TTSJobSchema(
+        text=body.text,
+        language=body.language,
+        speed=body.speed,
+        format=body.format,
+        clone_audio=body.clone_audio,
+    )
+
+    try:
+        result = await processor.process_tts_job(job)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except TTSError as exc:
+        logger.exception("TTS synthesis error")
+        raise HTTPException(status_code=500, detail=f"Synthesis failed: {exc}") from exc
+    except Exception as exc:
+        logger.exception("Unexpected TTS error")
+        raise HTTPException(status_code=500, detail="Internal TTS error") from exc
+
+    return StreamingResponse(
+        io.BytesIO(result.audio_bytes),
+        media_type=result.mime_type,
+        headers={
+            "Content-Disposition": f"attachment; filename=speech.{body.format}",
+            "X-TTS-Duration-Ms": f"{result.duration_ms:.1f}",
+        },
+    )
+
+
