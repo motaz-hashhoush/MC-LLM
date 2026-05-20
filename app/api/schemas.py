@@ -45,8 +45,8 @@ class TaskRequest(BaseModel):
         max_length=50_000,
         description="The input text to process.",
     )
-    think: bool | None = Field(
-        default=None,
+    think: bool = Field(
+        default=False,
         description="Whether to include thinking tags in the generation process. Only applies to /generate.",
     )
     max_tokens: int = Field(
@@ -96,6 +96,16 @@ class HealthResponse(BaseModel):
 
 # ── TTS Schemas ───────────────────────────────────────────────────────────────
 
+_TTS_LANGUAGES = frozenset([
+    "en", "de", "fr", "it", "es", "pt", "nl", "pl", "ru", "uk",
+    "cs", "sk", "hr", "sl", "ro", "bg", "el", "sv", "da", "et",
+    "fi", "hu", "lt", "lv", "tr", "ja", "ko", "zh", "vi", "id",
+    "hi", "ar", "na",
+])
+
+_TTS_VOICES = frozenset(["M1", "M2", "M3", "M4", "M5", "F1", "F2", "F3", "F4", "F5"])
+
+
 class TTSRequest(BaseModel):
     """Request body for the POST /v1/tts endpoint."""
 
@@ -103,35 +113,36 @@ class TTSRequest(BaseModel):
         ...,
         min_length=1,
         max_length=2000,
-        description="Text to synthesise (Arabic or English). Max 2 000 characters.",
+        description="Text to synthesise. Max 2 000 characters.",
     )
     language: str = Field(
         default="ar",
-        description="Language code: 'ar' (Arabic MSA) or 'en' (English).",
+        description=(
+            "ISO 639-1 language code (e.g. 'ar', 'en', 'fr') "
+            "or 'na' for automatic language detection. "
+            "Supertonic 3 supports 31 languages."
+        ),
+    )
+    voice_name: str = Field(
+        default="M1",
+        description="Voice style: M1–M5 (male) or F1–F5 (female).",
     )
     speed: float = Field(
-        default=1.0,
-        ge=0.5,
+        default=1.05,
+        ge=0.7,
         le=2.0,
-        description="Playback speed multiplier (0.5 – 2.0).",
+        description="Playback speed multiplier (0.7 – 2.0).",
+    )
+    total_steps: int = Field(
+        default=8,
+        ge=5,
+        le=12,
+        description="Denoising steps: 5 (fastest) to 12 (highest quality).",
     )
     format: str = Field(
         default="wav",
         description="Output audio format: 'wav' or 'mp3'.",
     )
-    clone_audio: str | None = Field(
-        default=None,
-        description=(
-            "Base64-encoded WAV audio for voice cloning. "
-            "When provided, the model will attempt to match the voice in the clip."
-        ),
-    )
-
-    @classmethod
-    def __get_validators__(cls):  # pydantic v1 compat hook (unused in v2)
-        yield cls.model_validate
-
-    # ── Field validators ──────────────────────────────────────────────────────
 
     from pydantic import field_validator
 
@@ -140,22 +151,25 @@ class TTSRequest(BaseModel):
     def text_not_empty(cls, v: str) -> str:
         if not v.strip():
             raise ValueError("text must not be empty")
-        if len(v) > 2000:
-            raise ValueError("text must be 2000 characters or fewer")
         return v
 
     @field_validator("language")
     @classmethod
     def valid_language(cls, v: str) -> str:
-        if v not in ("ar", "en"):
-            raise ValueError("language must be 'ar' or 'en'")
+        if v not in _TTS_LANGUAGES:
+            raise ValueError(
+                f"Unsupported language '{v}'. "
+                f"Supported codes: {', '.join(sorted(_TTS_LANGUAGES))}"
+            )
         return v
 
-    @field_validator("speed")
+    @field_validator("voice_name")
     @classmethod
-    def valid_speed(cls, v: float) -> float:
-        if not (0.5 <= v <= 2.0):
-            raise ValueError("speed must be between 0.5 and 2.0")
+    def valid_voice(cls, v: str) -> str:
+        if v not in _TTS_VOICES:
+            raise ValueError(
+                f"Invalid voice '{v}'. Choose from: {', '.join(sorted(_TTS_VOICES))}"
+            )
         return v
 
     @field_validator("format")

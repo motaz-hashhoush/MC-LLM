@@ -4,6 +4,8 @@ FastAPI API routes for the LLM inference gateway.
 
 from __future__ import annotations
 
+import asyncio
+import io
 import logging
 import time
 from typing import Annotated
@@ -51,12 +53,8 @@ async def _handle_task(
 ) -> TaskResponse:
     """Common handler shared by all task endpoints."""
     start = time.perf_counter()
-    # Decide think flag based on task type and user input
-    if task_type == TaskType.GENERATE:
-        think_val = body.think if body.think is not None else False
-    else:
-        # Defaults to False for summarize/rewrite, even if user sends True
-        think_val = False
+    # think is only honoured for /generate; forced off for summarize/rewrite
+    think_val = body.think if task_type == TaskType.GENERATE else False
 
     logger.info(
         "Received %s request (prompt_len=%d, max_tokens=%d, temp=%.2f, think=%s)",
@@ -116,7 +114,7 @@ async def generate(
 # ── Health ───────────────────────────────────────────────────────────────────
 
 @router.get("/health", response_model=HealthResponse)
-async def health(request: Request) -> HealthResponse:
+async def health() -> HealthResponse:
     """Return service health status."""
     return HealthResponse()
 
@@ -169,12 +167,14 @@ async def transcribe_audio(
         effective_language,
     )
 
+    gpu_semaphore: asyncio.Semaphore = request.app.state.gpu_semaphore
     try:
-        transcript = await whisper_client.transcribe(
-            audio_bytes=audio_bytes,
-            filename=file.filename or "audio.wav",
-            language=effective_language,
-        )
+        async with gpu_semaphore:
+            transcript = await whisper_client.transcribe(
+                audio_bytes=audio_bytes,
+                filename=file.filename or "audio.wav",
+                language=effective_language,
+            )
         logger.info("Transcription job %s completed (%d chars)", job_id, len(transcript))
         return TranscribeResponse(
             id=job_id,
@@ -196,21 +196,18 @@ async def transcribe_audio(
 
 # ── Text-to-Speech ────────────────────────────────────────────────────────────
 
-import asyncio
-import io
-
 from fastapi.responses import StreamingResponse
 
 from app.api.schemas import TTSRequest
-from app.tts.silma_client import SilmaTTSClient, TTSError
+from app.tts.supertonic_client import SupertonicTTSClient, TTSError
 from app.tts.tts_processor import TTSProcessor, TTSJobSchema
 
 tts_router = APIRouter(prefix="/v1", tags=["Text-to-Speech"])
 
 
-def _get_silma_client(request: Request) -> SilmaTTSClient:
-    """Retrieve SilmaTTSClient from application state."""
-    client: SilmaTTSClient | None = getattr(request.app.state, "silma_client", None)
+def _get_tts_client(request: Request) -> SupertonicTTSClient:
+    """Retrieve SupertonicTTSClient from application state."""
+    client: SupertonicTTSClient | None = getattr(request.app.state, "tts_client", None)
     if client is None:
         raise HTTPException(status_code=503, detail="TTS service not ready")
     return client
@@ -232,8 +229,8 @@ async def tts_speech(
     """
     Synthesise text to speech and return an audio stream.
 
-    Supports Arabic (MSA) and English. Optionally accepts a base64-encoded
-    WAV reference audio clip for zero-shot voice cloning.
+    Powered by Supertonic 3 (ONNX, CPU). Supports 31 languages and
+    10 voice styles (M1–M5, F1–F5).
 
     Returns
     -------
@@ -242,23 +239,21 @@ async def tts_speech(
 
     Errors
     ------
-    - **400** — Pydantic validation errors (text too long, invalid language/format)
+    - **400** — Validation error (text too long, invalid language/voice/format)
     - **503** — TTS model not loaded
     - **500** — Internal synthesis failure
     """
-    client = _get_silma_client(request)
+    client = _get_tts_client(request)
     processor = _get_tts_processor(request)
 
-    # Guard: model must be loaded
     if not client.is_loaded():
-        raise HTTPException(
-            status_code=503,
-            detail="TTS model not loaded.",
-        )
+        raise HTTPException(status_code=503, detail="TTS model not loaded.")
 
     logger.info(
-        "Received /v1/tts request (lang=%s, speed=%.2f, fmt=%s, chars=%d)",
+        "Received /v1/tts request (lang=%s, voice=%s, steps=%d, speed=%.2f, fmt=%s, chars=%d)",
         body.language,
+        body.voice_name,
+        body.total_steps,
         body.speed,
         body.format,
         len(body.text),
@@ -269,7 +264,8 @@ async def tts_speech(
         language=body.language,
         speed=body.speed,
         format=body.format,
-        clone_audio=body.clone_audio,
+        voice_name=body.voice_name,
+        total_steps=body.total_steps,
     )
 
     try:

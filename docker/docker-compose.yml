@@ -7,21 +7,6 @@
 # ─────────────────────────────────────────────────────────────────────────────
 
 services:
-  # ── Redis ────────────────────────────────────────────────────────────────
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: [ "CMD", "redis-cli", "ping" ]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - llm-net
-
   # ── vLLM Inference Server ───────────────────────────────────────────────
   vllm:
     image: vllm/vllm-openai:latest
@@ -55,8 +40,6 @@ services:
       - app_cache:/root/.cache                           # general cache
     environment:
       MODEL_NAME: "${MODEL_NAME}"
-      REDIS_HOST: "${REDIS_HOST}"
-      REDIS_PORT: "${REDIS_PORT}"
       VLLM_ENDPOINT: "${VLLM_ENDPOINT}"
       DATABASE_URL: "${DATABASE_URL}"
       MAX_TOKENS: "${MAX_TOKENS}"
@@ -67,12 +50,10 @@ services:
       STT_LANGUAGE: "${STT_LANGUAGE:-ar}"
       STT_MODEL_NAME: "${STT_MODEL_NAME:-deepdml/faster-whisper-large-v3-turbo-ct2}"
       STT_MODEL_PATH: "${STT_MODEL_PATH:-/models/deepdml/faster-whisper-large-v3-turbo-ct2}"
-      TTS_MODEL_NAME: "${TTS_MODEL_NAME:-silma-ai/silma-tts}"
-      TTS_MODEL_PATH: "${TTS_MODEL_PATH:-/models/silma-ai/silma-tts}"
-      TTS_DEVICE: "${TTS_DEVICE:-cuda}"
-      TTS_MAX_CHARS: "${TTS_MAX_CHARS:-2000}"
       TTS_DEFAULT_LANGUAGE: "${TTS_DEFAULT_LANGUAGE:-ar}"
-      TTS_DEFAULT_SPEED: "${TTS_DEFAULT_SPEED:-1.0}"
+      TTS_DEFAULT_VOICE: "${TTS_DEFAULT_VOICE:-M1}"
+      TTS_TOTAL_STEPS: "${TTS_TOTAL_STEPS:-8}"
+      TTS_DEFAULT_SPEED: "${TTS_DEFAULT_SPEED:-1.05}"
       TTS_DEFAULT_FORMAT: "${TTS_DEFAULT_FORMAT:-wav}"
     deploy:
       resources:
@@ -84,15 +65,12 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
-      redis:
-        condition: service_healthy
       vllm:
         condition: service_started
     networks:
       - llm-net
 
 volumes:
-  redis_data:
   vllm_models:
   app_cache:
 

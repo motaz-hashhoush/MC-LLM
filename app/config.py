@@ -49,13 +49,14 @@ class Settings(BaseSettings):
     RESULT_TTL: int = 3600  # seconds
     JOB_TIMEOUT: int = 120  # seconds
 
-    # --- TTS (SILMA) ---
-    TTS_MODEL_NAME: str = "silma-ai/silma-tts"
-    TTS_MODEL_PATH: str = "/models/silma-ai/silma-tts"
-    TTS_DEVICE: str = "cuda"
+    # --- TTS (Supertonic 3) ---
+    # Model auto-downloads to HF_HOME (~/.cache/huggingface) on first run.
+    TTS_MODEL_NAME: str = "Supertone/supertonic-3"
     TTS_MAX_CHARS: int = 2000
     TTS_DEFAULT_LANGUAGE: str = "ar"
-    TTS_DEFAULT_SPEED: float = 1.0
+    TTS_DEFAULT_VOICE: str = "M1"       # M1–M5 (male) | F1–F5 (female)
+    TTS_TOTAL_STEPS: int = 8            # denoising steps: 5 (fast) – 12 (quality)
+    TTS_DEFAULT_SPEED: float = 1.05
     TTS_DEFAULT_FORMAT: str = "wav"
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
