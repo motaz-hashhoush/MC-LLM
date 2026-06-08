@@ -26,6 +26,11 @@ class InferenceEngine:
         self._client = VLLMClient()
         logger.info("InferenceEngine initialised")
 
+    @property
+    def client(self) -> VLLMClient:
+        """Expose the underlying vLLM client (used by the OpenAI proxy route)."""
+        return self._client
+
     async def process_task(self, task: dict[str, Any]) -> dict[str, Any]:
         """
         Process a single task dict and return the result dict.

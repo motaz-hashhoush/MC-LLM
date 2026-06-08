@@ -12,6 +12,7 @@ from collections.abc import AsyncGenerator
 
 from fastapi import FastAPI
 
+from app.api.openai_proxy import openai_router
 from app.api.routes import router, tts_router
 from app.config import get_settings
 from app.db.database import DatabaseManager
@@ -69,6 +70,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     gpu_semaphore = asyncio.Semaphore(1)
 
     app.state.db = db
+    app.state.db_logger = db_logger
     app.state.task_processor = task_processor
     app.state.inference_engine = inference_engine
     app.state.gpu_semaphore = gpu_semaphore
@@ -116,6 +118,7 @@ def create_app() -> FastAPI:
     )
     app.include_router(router)
     app.include_router(tts_router)
+    app.include_router(openai_router)
     return app
 
 

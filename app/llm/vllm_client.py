@@ -5,6 +5,7 @@ Async client for the vLLM OpenAI-compatible inference API.
 from __future__ import annotations
 
 import logging
+from collections.abc import AsyncIterator
 from typing import Any
 
 import httpx
@@ -110,6 +111,33 @@ class VLLMClient:
         )
 
         return content
+
+    # ── OpenAI-compatible passthrough ─────────────────────────────────────
+
+    async def chat_completion(self, payload: dict[str, Any]) -> httpx.Response:
+        """
+        Forward a raw OpenAI-style chat-completion ``payload`` to vLLM and
+        return the unparsed :class:`httpx.Response`.
+
+        Used by the ``/v1/chat/completions`` proxy so the gateway can log the
+        call while handing the client back vLLM's response verbatim. The
+        caller is responsible for inspecting ``status_code`` — this method
+        does **not** raise on a non-2xx response.
+        """
+        return await self._http.post("/v1/chat/completions", json=payload)
+
+    async def stream_chat_completion(
+        self, payload: dict[str, Any]
+    ) -> AsyncIterator[bytes]:
+        """
+        Forward a streaming chat-completion ``payload`` to vLLM and yield the
+        raw SSE byte chunks as they arrive, preserving the OpenAI wire format.
+        """
+        async with self._http.stream(
+            "POST", "/v1/chat/completions", json=payload
+        ) as response:
+            async for chunk in response.aiter_bytes():
+                yield chunk
 
     # ── Health ───────────────────────────────────────────────────────────
 

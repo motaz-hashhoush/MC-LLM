@@ -10,6 +10,7 @@ services:
   # ── vLLM Inference Server ───────────────────────────────────────────────
   vllm:
     image: vllm/vllm-openai:latest
+    init: true
     command: >
       --model /models/${MODEL_NAME} --served-model-name ${MODEL_NAME} --port 8000 --max-model-len ${MAX_MODEL_LEN} --gpu-memory-utilization ${GPU_MEM_UTIL} --dtype ${DTYPE}
     volumes:
