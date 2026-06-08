@@ -1,22 +1,17 @@
 """
 TTSProcessor — business logic layer for TTS job execution.
-
-Handles validation, optional voice-clone temp file management, synthesis
-offloading, format conversion, and DB logging. Modeled after
-app/services/task_processor.py.
 """
 
 from __future__ import annotations
 
 import asyncio
-import base64
 import logging
-import tempfile
 import time
+import traceback
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from app.tts.silma_client import SilmaTTSClient, TTSError
+from app.tts.supertonic_client import SupertonicTTSClient, TTSError
 
 if TYPE_CHECKING:
     from app.db.db_logger import DBLogger
@@ -42,15 +37,16 @@ class TTSJobSchema:
     """
     Validated input for a TTS synthesis request.
 
-    This mirrors the TTSRequest Pydantic model but is a plain dataclass so
-    TTSProcessor has no FastAPI dependency.
+    Mirrors TTSRequest (Pydantic) but is a plain dataclass so TTSProcessor
+    has no FastAPI dependency.
     """
 
     text: str
     language: str = "ar"
-    speed: float = 1.0
-    format: str = "wav"                 # "wav" | "mp3"
-    clone_audio: str | None = None      # base64-encoded WAV string
+    speed: float = 1.05
+    format: str = "wav"         # "wav" | "mp3"
+    voice_name: str = "M1"      # M1–M5, F1–F5
+    total_steps: int = 8        # denoising steps: 5 (fast) – 12 (quality)
 
 
 # ── Processor ─────────────────────────────────────────────────────────────────
@@ -62,19 +58,23 @@ class TTSProcessor:
     Flow
     ----
     1. Validate text length
-    2. (Optional) decode reference audio to a temp file for voice cloning
-    3. Offload CPU-bound synthesis to a thread pool via asyncio.to_thread()
-    4. (Optional) convert WAV → MP3 in thread pool
-    5. Log result to the tts_requests DB table
-    6. Return TTSResult
+    2. Acquire gpu_semaphore, offload synthesis to a thread pool, release
+    3. (Optional) convert WAV → MP3 in thread pool
+    4. Log result to the tts_requests DB table
+    5. Return TTSResult
     """
 
-    #: Hard limit enforced before touching the model (config-driven at call site)
-    MAX_TEXT_CHARS: int = 2000
+    MAX_TEXT_CHARS: int = 10000
 
-    def __init__(self, silma_client: SilmaTTSClient, db_logger: DBLogger) -> None:
-        self._client = silma_client
+    def __init__(
+        self,
+        tts_client: SupertonicTTSClient,
+        db_logger: DBLogger,
+        gpu_semaphore: asyncio.Semaphore | None = None,
+    ) -> None:
+        self._client = tts_client
         self._db_logger = db_logger
+        self._gpu_semaphore = gpu_semaphore or asyncio.Semaphore(1)
 
     # ── Public API ────────────────────────────────────────────────────────────
 
@@ -82,24 +82,13 @@ class TTSProcessor:
         """
         Execute a TTS synthesis job asynchronously.
 
-        Parameters
-        ----------
-        job:
-            Validated TTS request parameters.
-
-        Returns
-        -------
-        TTSResult
-            Audio bytes, MIME type, and synthesis duration.
-
         Raises
         ------
         ValueError
-            If text length exceeds the 2 000-character limit.
+            If text length exceeds MAX_TEXT_CHARS.
         TTSError
-            If the underlying synthesis or format conversion fails.
+            If synthesis or format conversion fails.
         """
-        # 1. Validate text length
         if len(job.text) > self.MAX_TEXT_CHARS:
             raise ValueError(
                 f"text must be {self.MAX_TEXT_CHARS} characters or fewer "
@@ -107,39 +96,19 @@ class TTSProcessor:
             )
 
         start_ms = time.monotonic()
-        ref_path: str | None = None
-        tmp_file = None
 
         try:
-            # 2. Decode clone audio (voice cloning)
-            if job.clone_audio:
-                try:
-                    ref_bytes = base64.b64decode(job.clone_audio)
-                except Exception as exc:
-                    raise ValueError(
-                        "clone_audio is not valid base64-encoded data."
-                    ) from exc
-
-                # Write to named temp file; delete=False so we control deletion
-                tmp_file = tempfile.NamedTemporaryFile(
-                    suffix=".wav", delete=False
+            # Serialise CPU-bound synthesis via shared semaphore
+            async with self._gpu_semaphore:
+                wav_bytes: bytes = await asyncio.to_thread(
+                    self._client.synthesize,
+                    job.text,
+                    job.language,
+                    job.speed,
+                    job.voice_name,
+                    job.total_steps,
                 )
-                tmp_file.write(ref_bytes)
-                tmp_file.flush()
-                tmp_file.close()
-                ref_path = tmp_file.name
-                logger.debug("Voice clone reference audio written to %s", ref_path)
 
-            # 3. Run CPU-bound synthesis in thread pool
-            wav_bytes: bytes = await asyncio.to_thread(
-                self._client.synthesize,
-                job.text,
-                job.language,
-                job.speed,
-                ref_path,  # clone_audio temp file path
-            )
-
-            # 4. Format conversion
             if job.format == "mp3":
                 audio_bytes: bytes = await asyncio.to_thread(
                     self._client.convert_to_mp3, wav_bytes
@@ -151,21 +120,21 @@ class TTSProcessor:
 
             duration_ms = (time.monotonic() - start_ms) * 1000
 
-            # 5. Log success to DB (fire-and-forget; failures are caught inside)
             await self._log_tts_request(
                 text=job.text,
                 language=job.language,
                 speed=job.speed,
                 fmt=job.format,
-                has_ref_audio=ref_path is not None,
+                voice_name=job.voice_name,
                 duration_ms=duration_ms,
                 audio_size_b=len(audio_bytes),
                 status="success",
             )
 
             logger.info(
-                "TTS job complete (lang=%s, fmt=%s, size=%d bytes, %.1f ms)",
+                "TTS job complete (lang=%s, voice=%s, fmt=%s, size=%d bytes, %.1f ms)",
                 job.language,
+                job.voice_name,
                 job.format,
                 len(audio_bytes),
                 duration_ms,
@@ -178,33 +147,19 @@ class TTSProcessor:
             )
 
         except (ValueError, TTSError):
-            # Re-raise validation / synthesis errors after DB logging
             duration_ms = (time.monotonic() - start_ms) * 1000
-            import traceback
             await self._log_tts_request(
                 text=job.text,
                 language=job.language,
                 speed=job.speed,
                 fmt=job.format,
-                has_ref_audio=ref_path is not None,
+                voice_name=job.voice_name,
                 duration_ms=duration_ms,
                 audio_size_b=None,
                 status="error",
                 error_message=traceback.format_exc(),
             )
             raise
-
-        finally:
-            # Always clean up temp file
-            if tmp_file is not None:
-                import os
-                try:
-                    os.unlink(tmp_file.name)
-                    logger.debug("Deleted temp voice-clone file %s", tmp_file.name)
-                except OSError:
-                    logger.warning(
-                        "Could not delete temp voice-clone file %s", tmp_file.name
-                    )
 
     # ── Private ───────────────────────────────────────────────────────────────
 
@@ -214,7 +169,7 @@ class TTSProcessor:
         language: str,
         speed: float,
         fmt: str,
-        has_ref_audio: bool,
+        voice_name: str,
         duration_ms: float,
         audio_size_b: int | None,
         status: str,
@@ -225,7 +180,6 @@ class TTSProcessor:
             from app.db.models import TTSRequestLog
             from app.db.database import DatabaseManager
 
-            # Access the DatabaseManager via the db_logger's private handle
             db: DatabaseManager = self._db_logger._db
 
             async with db.get_session() as session:
@@ -234,7 +188,7 @@ class TTSProcessor:
                     language=language,
                     speed=speed,
                     format=fmt,
-                    has_ref_audio=has_ref_audio,
+                    voice_name=voice_name,
                     duration_ms=duration_ms,
                     audio_size_b=audio_size_b,
                     status=status,

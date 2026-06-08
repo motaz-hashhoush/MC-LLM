@@ -73,6 +73,7 @@ class SilmaTTSClient:
         self.device: str = device
         self._tts: Any = None
         self._lock: threading.Lock = threading.Lock()
+        self._default_ref_audio: str = ""  # set in load() after silma_tts is imported
 
     # ── Lifecycle ─────────────────────────────────────────────────────────────
 
@@ -104,7 +105,15 @@ class SilmaTTSClient:
         )
 
         try:
+            import silma_tts as _silma_pkg  # type: ignore[import]
+            from pathlib import Path
             from silma_tts.api import SilmaTTS  # type: ignore[import]
+
+            # Resolve the bundled reference audio path from the installed package so
+            # this survives pip upgrades and Python version changes.
+            self._default_ref_audio = str(
+                Path(_silma_pkg.__file__).parent / "infer" / "ref_audio_samples" / "ar.ref.24k.wav"
+            )
 
             # The API requires passing full paths to model files rather than just the directory
             ckpt_file = os.path.join(self.model_path, "model.pt")
@@ -129,8 +138,7 @@ class SilmaTTSClient:
             # providing the exact hardcoded transcript skips transcription entirely.
             logger.info("Running TTS warmup to pre-cache reference audio…")
             _warmup_out = os.path.join(tempfile.gettempdir(), "_silma_warmup.wav")
-            _DEFAULT_REF = ("/usr/local/lib/python3.12/site-packages"
-                            "/silma_tts/infer/ref_audio_samples/ar.ref.24k.wav")
+            _DEFAULT_REF = self._default_ref_audio
             # Exact transcript of ar.ref.24k.wav to skip internal transcription
             _DEFAULT_REF_TEXT = (
                 "ويدقق النظر في القرآن الكريم وسائر الكتب السماوية "
@@ -226,10 +234,8 @@ class SilmaTTSClient:
 
                 # The package requires a reference audio (zero-shot architecture).
                 # If the user didn't provide one, use the Arabic sample bundled with the package.
-                default_ref = "/usr/local/lib/python3.12/site-packages/silma_tts/infer/ref_audio_samples/ar.ref.24k.wav"
-                
                 if not clone_audio_path:
-                    ref_file = default_ref
+                    ref_file = self._default_ref_audio
                     # Use hardcoded transcript to hit the cache perfectly
                     ref_text = (
                         "ويدقق النظر في القرآن الكريم وسائر الكتب السماوية "

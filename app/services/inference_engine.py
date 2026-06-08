@@ -45,7 +45,7 @@ class InferenceEngine:
         params: dict[str, Any] = task.get("parameters", {})
         job_id: str = task["id"]
 
-        think_enabled: bool = params.get("think", True)
+        think_enabled: bool = params.get("think", False)
         if not think_enabled:
             text = f"{text}\n/no_think"
 

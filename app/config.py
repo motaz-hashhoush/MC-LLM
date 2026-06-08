@@ -49,14 +49,20 @@ class Settings(BaseSettings):
     RESULT_TTL: int = 3600  # seconds
     JOB_TIMEOUT: int = 120  # seconds
 
-    # --- TTS (SILMA) ---
-    TTS_MODEL_NAME: str = "silma-ai/silma-tts"
-    TTS_MODEL_PATH: str = "/models/silma-ai/silma-tts"
-    TTS_DEVICE: str = "cuda"
-    TTS_MAX_CHARS: int = 2000
+    # --- TTS (Supertonic 3) ---
+    # Model auto-downloads to HF_HOME (~/.cache/huggingface) on first run.
+    TTS_MODEL_NAME: str = "Supertone/supertonic-3"
+    TTS_MAX_CHARS: int = 10000
     TTS_DEFAULT_LANGUAGE: str = "ar"
-    TTS_DEFAULT_SPEED: float = 1.0
+    TTS_DEFAULT_VOICE: str = "M1"       # M1–M5 (male) | F1–F5 (female)
+    TTS_TOTAL_STEPS: int = 8            # denoising steps: 5 (fast) – 12 (quality)
+    TTS_DEFAULT_SPEED: float = 1.05
     TTS_DEFAULT_FORMAT: str = "wav"
+    # ONNX Runtime threading. 0 = auto (ORT picks physical cores only).
+    # On CPU-only inference, set INTRA close to the container's logical core count
+    # for maximum single-request throughput. INTER stays low (graph is mostly sequential).
+    TTS_INTRA_OP_THREADS: int = 0
+    TTS_INTER_OP_THREADS: int = 0
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 

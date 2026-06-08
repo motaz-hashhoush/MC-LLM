@@ -10,10 +10,9 @@ RUN apt-get update && \
     gnupg \
     && add-apt-repository ppa:deadsnakes/ppa -y && \
     apt-get update && \
-    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommending \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     python3.12 \
     python3.12-dev \
-    python3.12-distutils \
     curl \
     gcc \
     libc6-dev \

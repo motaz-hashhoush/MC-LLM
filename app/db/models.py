@@ -7,7 +7,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, Float, Integer, String, Text, func
+from sqlalchemy import DateTime, Float, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -63,9 +63,9 @@ class TTSRequestLog(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     text: Mapped[str] = mapped_column(Text, nullable=False)
     language: Mapped[str] = mapped_column(String(10), nullable=False, default="ar")
-    speed: Mapped[float] = mapped_column(Float, nullable=False, default=1.0)
+    voice_name: Mapped[str] = mapped_column(String(10), nullable=False, default="M1")
+    speed: Mapped[float] = mapped_column(Float, nullable=False, default=1.05)
     format: Mapped[str] = mapped_column(String(10), nullable=False, default="wav")
-    has_ref_audio: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     duration_ms: Mapped[float | None] = mapped_column(Float, nullable=True)
     audio_size_b: Mapped[int | None] = mapped_column(Integer, nullable=True)
     status: Mapped[str] = mapped_column(
@@ -81,6 +81,6 @@ class TTSRequestLog(Base):
     def __repr__(self) -> str:
         return (
             f"<TTSRequestLog id={self.id} lang={self.language} "
-            f"status={self.status}>"
+            f"voice={self.voice_name} status={self.status}>"
         )
 
