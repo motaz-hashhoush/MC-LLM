@@ -55,6 +55,9 @@ services:
       TTS_TOTAL_STEPS: "${TTS_TOTAL_STEPS:-8}"
       TTS_DEFAULT_SPEED: "${TTS_DEFAULT_SPEED:-1.05}"
       TTS_DEFAULT_FORMAT: "${TTS_DEFAULT_FORMAT:-wav}"
+      TTS_INTRA_OP_THREADS: "${TTS_INTRA_OP_THREADS:-24}"
+      TTS_INTER_OP_THREADS: "${TTS_INTER_OP_THREADS:-2}"
+      OMP_NUM_THREADS: "${OMP_NUM_THREADS:-24}"
     deploy:
       resources:
         reservations:

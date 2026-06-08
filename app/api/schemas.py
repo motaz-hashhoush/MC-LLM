@@ -112,8 +112,8 @@ class TTSRequest(BaseModel):
     text: str = Field(
         ...,
         min_length=1,
-        max_length=2000,
-        description="Text to synthesise. Max 2 000 characters.",
+        max_length=10000,
+        description="Text to synthesise. Max 10 000 characters.",
     )
     language: str = Field(
         default="ar",

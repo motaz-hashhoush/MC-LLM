@@ -52,9 +52,15 @@ class SupertonicTTSClient:
         "hi", "ar", "na",
     ])
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        intra_op_num_threads: int | None = None,
+        inter_op_num_threads: int | None = None,
+    ) -> None:
         self._tts: Any = None
         self._lock = threading.Lock()
+        self._intra_op_num_threads = intra_op_num_threads
+        self._inter_op_num_threads = inter_op_num_threads
 
     # ── Lifecycle ─────────────────────────────────────────────────────────────
 
@@ -73,11 +79,20 @@ class SupertonicTTSClient:
         RuntimeError
             If the supertonic package is not installed or the model fails to load.
         """
-        logger.info("Loading Supertonic 3 TTS model (auto_download=True)…")
+        logger.info(
+            "Loading Supertonic 3 TTS model (auto_download=True, "
+            "intra_op_num_threads=%s, inter_op_num_threads=%s)…",
+            self._intra_op_num_threads or "auto",
+            self._inter_op_num_threads or "auto",
+        )
         try:
             from supertonic import TTS  # type: ignore[import]
 
-            self._tts = TTS(auto_download=True)
+            self._tts = TTS(
+                auto_download=True,
+                intra_op_num_threads=self._intra_op_num_threads,
+                inter_op_num_threads=self._inter_op_num_threads,
+            )
             logger.info(
                 "Supertonic 3 TTS model loaded (sample_rate=%d Hz)", self.SAMPLE_RATE
             )

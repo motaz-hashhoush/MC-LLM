@@ -74,7 +74,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     app.state.gpu_semaphore = gpu_semaphore
 
     # Whisper STT + Supertonic TTS — load both concurrently to cut startup time
-    tts_client = SupertonicTTSClient()
+    tts_client = SupertonicTTSClient(
+        intra_op_num_threads=settings.TTS_INTRA_OP_THREADS or None,
+        inter_op_num_threads=settings.TTS_INTER_OP_THREADS or None,
+    )
 
     logger.info("Loading Whisper STT and Supertonic TTS models in parallel…")
     whisper_client, _ = await asyncio.gather(

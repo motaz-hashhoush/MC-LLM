@@ -64,7 +64,7 @@ class TTSProcessor:
     5. Return TTSResult
     """
 
-    MAX_TEXT_CHARS: int = 2000
+    MAX_TEXT_CHARS: int = 10000
 
     def __init__(
         self,
