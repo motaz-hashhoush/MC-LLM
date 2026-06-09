@@ -16,6 +16,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 import time
 import uuid
 
@@ -49,6 +50,25 @@ def _get_db_logger(request: Request) -> DBLogger:
     return db_logger
 
 
+_THINK_RE = re.compile(r"<think>.*?</think>", re.DOTALL)
+
+
+def _strip_think(text: str) -> str:
+    return _THINK_RE.sub("", text).strip()
+
+
+def _inject_no_think(messages: list[dict]) -> list[dict]:
+    """Append /no_think to the last user message if not already present."""
+    for i in range(len(messages) - 1, -1, -1):
+        if messages[i].get("role") == "user":
+            content = messages[i].get("content") or ""
+            if "/no_think" not in content:
+                messages = [m.copy() for m in messages]
+                messages[i] = {**messages[i], "content": f"{content}\n/no_think"}
+            return messages
+    return messages
+
+
 def _summarise_messages(messages: list[dict]) -> str:
     """Serialise the OpenAI ``messages`` array for the ``input_text`` column."""
     try:
@@ -75,6 +95,8 @@ async def chat_completions(request: Request):
         raise HTTPException(
             status_code=400, detail="Request body must contain a 'messages' array"
         )
+
+    payload["messages"] = _inject_no_think(payload.get("messages") or [])
 
     job_id = str(uuid.uuid4())
     input_text = _summarise_messages(payload.get("messages", []))
@@ -129,15 +151,17 @@ async def _proxy_non_streaming(
 
     # Extract assistant text + token usage for the completion log
     try:
-        output_text = data["choices"][0]["message"]["content"] or ""
+        raw_content = data["choices"][0]["message"]["content"] or ""
+        cleaned = _strip_think(raw_content)
+        data["choices"][0]["message"]["content"] = cleaned
     except (KeyError, IndexError, TypeError):
-        output_text = ""
+        cleaned = ""
     tokens_used = (data.get("usage") or {}).get("total_tokens")
 
     asyncio.create_task(
         db_logger.log_completion(
             job_id=job_id,
-            output_text=output_text,
+            output_text=cleaned,
             tokens_used=tokens_used,
             latency_ms=latency_ms,
         )
@@ -182,7 +206,7 @@ async def _proxy_streaming(
         asyncio.create_task(
             db_logger.log_completion(
                 job_id=job_id,
-                output_text=output_text,
+                output_text=_strip_think(output_text),
                 tokens_used=tokens_used,
                 latency_ms=latency_ms,
             )
